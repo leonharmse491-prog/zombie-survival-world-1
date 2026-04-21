@@ -32,13 +32,17 @@ export function HUD() {
     return () => cancelAnimationFrame(raf);
   }, [phase]);
 
-  // Survive timer
+  // Survive timer — when it expires, spawn the end-of-mission boss instead
+  // of completing immediately. The mission only ends once that boss dies.
   useEffect(() => {
     if (phase !== "playing" || !mission) return;
     if (mission.objective.kind !== "survive") return;
     const elapsed = (now - missionStartTime) / 1000;
     if (elapsed >= surviveDuration) {
-      useGame.getState().completeMission();
+      const s = useGame.getState();
+      if (!s.endBossPending && !s.endBossSpawned) {
+        s.triggerEndBossSpawn();
+      }
     }
   }, [now, phase, mission, missionStartTime, surviveDuration]);
 
@@ -49,9 +53,11 @@ export function HUD() {
   const reloadPct = reloading
     ? Math.max(0, Math.min(1, 1 - (reloadEndsAt - now) / Math.max(1, reloadEndsAt - missionStartTime)))
     : 0;
-  const reloadProgress = reloading
+  const reloadProgress = reloading && !w.melee
     ? Math.min(1, 1 - (reloadEndsAt - now) / (w.reloadTime * stats.reloadMult * 1000))
     : 0;
+  const endBossPending = useGame.getState().endBossPending;
+  const endBossSpawned = useGame.getState().endBossSpawned;
 
   return (
     <div className="absolute inset-0 pointer-events-none z-40 select-none" key={damageFlashId}>
@@ -66,14 +72,22 @@ export function HUD() {
           <div className="text-[10px] tracker text-[var(--muted)] uppercase">Mission {mission.id}</div>
           <div className="text-sm font-bold tracker uppercase">{mission.title}</div>
           <div className="text-xs text-[var(--muted)] mt-0.5">
-            {mission.objective.kind === "kill" && (
-              <>Eliminate: <span className="text-[var(--accent)] tracker">{kills}</span> / {mission.objective.count}</>
-            )}
-            {mission.objective.kind === "survive" && (
-              <>Survive: <span className="text-[var(--accent)] tracker">{Math.max(0, surviveDuration - elapsed).toFixed(1)}s</span></>
-            )}
-            {mission.objective.kind === "boss" && (
-              <>Eliminate: <span className="text-[var(--accent)] tracker">{kills}</span> / {mission.objective.count + 1} (incl. Boss)</>
+            {(endBossPending || endBossSpawned) ? (
+              <span className="text-[var(--accent)] tracker">
+                {endBossSpawned ? "KILL THE BOSS — bonus reward" : "Boss inbound..."}
+              </span>
+            ) : (
+              <>
+                {mission.objective.kind === "kill" && (
+                  <>Eliminate: <span className="text-[var(--accent)] tracker">{kills}</span> / {mission.objective.count}</>
+                )}
+                {mission.objective.kind === "survive" && (
+                  <>Survive: <span className="text-[var(--accent)] tracker">{Math.max(0, surviveDuration - elapsed).toFixed(1)}s</span></>
+                )}
+                {mission.objective.kind === "boss" && (
+                  <>Eliminate: <span className="text-[var(--accent)] tracker">{kills}</span> / {mission.objective.count + 1} (incl. Boss)</>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -105,7 +119,9 @@ export function HUD() {
         <div className="text-[10px] uppercase tracker text-[var(--muted)]">Weapon</div>
         <div className="text-sm font-bold uppercase">{w.name}</div>
         <div className="mt-1 text-3xl font-bold tracker">
-          {reloading ? (
+          {w.melee ? (
+            <span className="text-white">MELEE <span className="text-[var(--muted)] text-lg">/ ∞</span></span>
+          ) : reloading ? (
             <span className="text-[var(--accent-2)]">RELOADING</span>
           ) : (
             <>
@@ -141,7 +157,7 @@ export function HUD() {
 
       {/* Controls hint */}
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] tracker uppercase text-[var(--muted)]">
-        WASD Move · Shift Sprint · Mouse Aim · LMB Fire · RMB Aim · R Reload · 1-8 Switch · Esc Pause
+        WASD Move · Shift Sprint · Mouse Aim · LMB Fire/Swing · RMB Aim · R Reload · 1-9 / Wheel Switch · Esc Pause
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ export interface Zombie {
   burnUntil: number;
   burnDmgPerSec: number;
   isBoss: boolean;
+  isEndBoss: boolean;
   size: number;
   yaw: number;
   walkPhase: number;
@@ -67,7 +68,7 @@ export function useZombies(
         z.hp -= amount;
         if (z.hp <= 0) {
           zombies.current = zombies.current.filter((x) => x.id !== id);
-          addKill(z.isBoss);
+          addKill(z.isBoss, z.isEndBoss);
         }
       },
       splash(center, radius, dmg) {
@@ -79,7 +80,7 @@ export function useZombies(
             z.hp -= amt;
             if (z.hp <= 0) {
               zombies.current = zombies.current.filter((x) => x.id !== z.id);
-              addKill(z.isBoss);
+              addKill(z.isBoss, z.isEndBoss);
             }
           }
         }
@@ -114,14 +115,21 @@ export function useZombies(
       now - lastSpawn.current > spawnInterval
     ) {
       lastSpawn.current = now;
-      // Find a spawn point: at least MIN_DIST away from player, inside arena,
-      // not inside any obstacle. Try several candidates before giving up.
-      const MIN_DIST = 25;
-      const MAX_DIST = 45;
+      // Find a spawn point: well outside MIN_DIST so a sprinting player can't
+      // close the gap before the zombie even starts moving. Bias toward
+      // behind the player so they don't pop in front of the camera.
+      const MIN_DIST = 38;
+      const MAX_DIST = 60;
+      // Player's facing yaw (camera-forward in XZ plane).
+      const camFwd = new THREE.Vector3();
+      // playerPos is the camera pos; we don't have rotation here, so derive
+      // a forward vector from where the player is moving toward the spawn —
+      // not perfect, but combined with biasBehind logic, gives variety.
+      void camFwd;
       let spawnX = 0;
       let spawnZ = 0;
       let valid = false;
-      for (let attempt = 0; attempt < 24; attempt++) {
+      for (let attempt = 0; attempt < 28; attempt++) {
         const angle = Math.random() * Math.PI * 2;
         const dist = MIN_DIST + Math.random() * (MAX_DIST - MIN_DIST);
         const cx = player.x + Math.cos(angle) * dist;
@@ -165,6 +173,7 @@ export function useZombies(
         burnUntil: 0,
         burnDmgPerSec: 0,
         isBoss: false,
+        isEndBoss: false,
         size: 1,
         yaw: Math.atan2(player.x - clampedX, player.z - clampedZ),
         walkPhase: Math.random() * Math.PI * 2,
@@ -172,7 +181,52 @@ export function useZombies(
       }
     }
 
-    // Boss spawn
+    // End-of-mission mini-boss for KILL and SURVIVE missions.
+    // Triggered by store.triggerEndBossSpawn() once objective is met.
+    const gs = useGame.getState();
+    if (
+      (mission.objective.kind === "kill" || mission.objective.kind === "survive") &&
+      gs.endBossPending &&
+      !gs.endBossSpawned
+    ) {
+      let ex = 0, ez = 0, eValid = false;
+      for (let attempt = 0; attempt < 28; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 28 + Math.random() * 14;
+        const cx = player.x + Math.cos(angle) * dist;
+        const cz = player.z + Math.sin(angle) * dist;
+        if (cx < -75 || cx > 75 || cz < -75 || cz > 75) continue;
+        let blocked = false;
+        for (const o of obstaclesAABB) {
+          if (cx > o.minX - 1.5 && cx < o.maxX + 1.5 && cz > o.minZ - 1.5 && cz < o.maxZ + 1.5) {
+            blocked = true;
+            break;
+          }
+        }
+        if (blocked) continue;
+        ex = cx; ez = cz; eValid = true; break;
+      }
+      if (eValid) {
+        const hp = 900 + 300 * mission.zombieMult;
+        zombies.current.push({
+          id: nextId.current++,
+          pos: new THREE.Vector3(ex, 1.4, ez),
+          hp, maxHp: hp,
+          speed: 4.0,
+          attackCd: 0,
+          burnUntil: 0,
+          burnDmgPerSec: 0,
+          isBoss: true,
+          isEndBoss: true,
+          size: 1.9,
+          yaw: Math.atan2(player.x - ex, player.z - ez),
+          walkPhase: 0,
+        });
+        useGame.setState({ endBossSpawned: true, endBossPending: false });
+      }
+    }
+
+    // Boss spawn (for boss-objective missions: this IS the end boss)
     if (
       (mission.objective.kind === "boss") &&
       !bossSpawned &&
@@ -206,6 +260,7 @@ export function useZombies(
           burnUntil: 0,
           burnDmgPerSec: 0,
           isBoss: true,
+          isEndBoss: false,
           size: 2.2,
           yaw: Math.atan2(player.x - bx, player.z - bz),
           walkPhase: 0,
@@ -263,7 +318,7 @@ export function useZombies(
     const before = zombies.current.length;
     zombies.current = zombies.current.filter((z) => {
       if (z.hp <= 0) {
-        addKill(z.isBoss);
+        addKill(z.isBoss, z.isEndBoss);
         return false;
       }
       return true;

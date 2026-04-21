@@ -1,8 +1,11 @@
 export type WeaponId =
+  | "machete"
   | "pistol"
+  | "katana"
   | "smg"
   | "shotgun"
   | "rifle"
+  | "chainsaw"
   | "sniper"
   | "lmg"
   | "grenade"
@@ -25,9 +28,32 @@ export interface WeaponDef {
   desc: string;
   splash?: number; // splash radius
   burn?: boolean;
+  melee?: boolean;
+  meleeArc?: number; // radians half-angle of swing
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
+  machete: {
+    id: "machete", name: "Machete", cost: 0, unlockMission: 0,
+    damage: 55, fireRate: 2.4, magSize: 1, reloadTime: 0,
+    range: 2.4, spread: 0, pellets: 1, recoil: 0.4,
+    color: "#888", desc: "Silent starter blade. No ammo, short reach.",
+    melee: true, meleeArc: 0.7,
+  },
+  katana: {
+    id: "katana", name: "Katana", cost: 2200, unlockMission: 2,
+    damage: 110, fireRate: 2.0, magSize: 1, reloadTime: 0,
+    range: 2.8, spread: 0, pellets: 1, recoil: 0.3,
+    color: "#dde", desc: "Single sweeping cut — high damage in a wide arc.",
+    melee: true, meleeArc: 1.0,
+  },
+  chainsaw: {
+    id: "chainsaw", name: "Chainsaw", cost: 4800, unlockMission: 4,
+    damage: 38, fireRate: 8, magSize: 1, reloadTime: 0,
+    range: 2.6, spread: 0, pellets: 1, recoil: 0.5,
+    color: "#a13", desc: "Continuous shred — chews through crowds, no ammo.",
+    melee: true, meleeArc: 0.55,
+  },
   pistol: {
     id: "pistol", name: "M9 Pistol", cost: 0, unlockMission: 0,
     damage: 22, fireRate: 4, magSize: 12, reloadTime: 1.2,
@@ -81,7 +107,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 };
 
 export const WEAPON_ORDER: WeaponId[] = [
-  "pistol", "smg", "shotgun", "rifle", "sniper", "lmg", "grenade", "flamethrower",
+  "machete", "pistol", "katana", "smg", "shotgun", "rifle", "chainsaw", "sniper", "lmg", "grenade", "flamethrower",
 ];
 
 export interface UpgradeDef {
@@ -158,7 +184,7 @@ export const MISSIONS: Mission[] = [
     story:
       "Day 1. The radio went dead three hours ago. They're slow, but they don't stop. You need to clear the perimeter before sundown.",
     objective: { kind: "kill", count: 8 },
-    zombieMult: 1.0,
+    zombieMult: 1.1,
     reward: 600,
     unlockWeapon: "smg",
   },
@@ -169,7 +195,7 @@ export const MISSIONS: Mission[] = [
     story:
       "There's medical supplies in the warehouse, but the noise will draw a swarm. Hold the line until the chopper marks the drop.",
     objective: { kind: "survive", count: 60 },
-    zombieMult: 1.3,
+    zombieMult: 1.5,
     reward: 1000,
     unlockWeapon: "shotgun",
   },
@@ -180,7 +206,7 @@ export const MISSIONS: Mission[] = [
     story:
       "They followed the gunfire. A full horde is closing on the depot. No retreat — thin them out before they reach the survivors.",
     objective: { kind: "kill", count: 20 },
-    zombieMult: 1.6,
+    zombieMult: 1.9,
     reward: 1600,
     unlockWeapon: "rifle",
   },
@@ -191,7 +217,7 @@ export const MISSIONS: Mission[] = [
     story:
       "A second strain is moving fast and angry. Hold the bridge so the convoy can cross. You won't get a second chance at this.",
     objective: { kind: "survive", count: 90 },
-    zombieMult: 2.0,
+    zombieMult: 2.4,
     reward: 2200,
     unlockWeapon: "sniper",
   },
@@ -202,7 +228,7 @@ export const MISSIONS: Mission[] = [
     story:
       "Command wants the meatpacking plant cleared. There's something nesting in there. Drown it in lead.",
     objective: { kind: "kill", count: 35 },
-    zombieMult: 2.4,
+    zombieMult: 2.9,
     reward: 3000,
     unlockWeapon: "lmg",
   },
@@ -213,7 +239,7 @@ export const MISSIONS: Mission[] = [
     story:
       "Recon spotted a mutated host — twice the size, takes a magazine to drop. End it before it reaches the camp.",
     objective: { kind: "boss", count: 15 },
-    zombieMult: 2.6,
+    zombieMult: 3.2,
     reward: 4000,
     unlockWeapon: "grenade",
   },
@@ -224,7 +250,7 @@ export const MISSIONS: Mission[] = [
     story:
       "The lab is the source. Burn it to the ground. They're going to throw everything they have at you.",
     objective: { kind: "survive", count: 120 },
-    zombieMult: 3.0,
+    zombieMult: 3.7,
     reward: 5500,
     unlockWeapon: "flamethrower",
   },
@@ -235,7 +261,7 @@ export const MISSIONS: Mission[] = [
     story:
       "The Alpha is the source intelligence — kill it and the swarm collapses. This is the end of the line. Make it count.",
     objective: { kind: "boss", count: 25 },
-    zombieMult: 3.5,
+    zombieMult: 4.4,
     reward: 9000,
   },
 ];

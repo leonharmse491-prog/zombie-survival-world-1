@@ -49,7 +49,7 @@ export function Player({
       if (e.code === "KeyR") {
         useGame.getState().startReload();
       }
-      const num = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8"].indexOf(e.code);
+      const num = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9"].indexOf(e.code);
       if (num >= 0) {
         const owned = useGame.getState().ownedWeapons;
         if (owned[num]) useGame.getState().selectWeapon(owned[num]);
@@ -187,12 +187,34 @@ function tryFire(
   dmgMult: number
 ): boolean {
   const game = useGame.getState();
-  if (!game.consumeAmmo(1)) return false;
-  if (!api) return true;
 
   const origin: [number, number, number] = [camera.position.x, camera.position.y, camera.position.z];
   const baseDir = new THREE.Vector3();
   camera.getWorldDirection(baseDir).normalize();
+
+  // Melee swing: no ammo, hits all zombies inside an arc within range.
+  if (w.melee) {
+    if (!api) return true;
+    const range = w.range;
+    const arc = w.meleeArc ?? 0.7;
+    const cosArc = Math.cos(arc);
+    const meleeDmg = w.damage * dmgMult;
+    for (const z of api.list) {
+      const dx = z.pos.x - origin[0];
+      const dz = z.pos.z - origin[2];
+      const dy = (z.pos.y + 0.3 * z.size) - origin[1];
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist > range + 0.85 * z.size) continue;
+      const inv = dist > 0.0001 ? 1 / dist : 0;
+      const dot = (dx * baseDir.x + dy * baseDir.y + dz * baseDir.z) * inv;
+      if (dot < cosArc) continue;
+      api.damage(z.id, meleeDmg);
+    }
+    return true;
+  }
+
+  if (!game.consumeAmmo(1)) return false;
+  if (!api) return true;
 
   const pellets = w.pellets ?? 1;
   const dmgPer = w.damage * dmgMult;

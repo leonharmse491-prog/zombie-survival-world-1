@@ -29,6 +29,9 @@ export interface GameState {
   killsThisMission: number;
   bossKillsThisMission: number;
   bossSpawned: boolean;
+  endBossPending: boolean;
+  endBossSpawned: boolean;
+  endBossDefeated: boolean;
   missionStartTime: number;
   surviveDuration: number;
   damageFlashId: number;
@@ -39,7 +42,8 @@ export interface GameState {
   completeMission: () => void;
   failMission: () => void;
   takeDamage: (amount: number) => void;
-  addKill: (boss?: boolean) => void;
+  addKill: (boss?: boolean, endBoss?: boolean) => void;
+  triggerEndBossSpawn: () => void;
   addCash: (n: number) => void;
   buyWeapon: (id: WeaponId) => void;
   buyUpgrade: (id: string) => void;
@@ -61,7 +65,8 @@ function defaultAmmo(): Record<WeaponId, number> {
 
 function defaultReserves(): Record<WeaponId, number> {
   return WEAPON_ORDER.reduce((acc, id) => {
-    acc[id] = WEAPONS[id].magSize * 4;
+    // Melee weapons have unlimited reserve (shown as ∞ in HUD).
+    acc[id] = WEAPONS[id].melee ? 999 : WEAPONS[id].magSize * 4;
     return acc;
   }, {} as Record<WeaponId, number>);
 }
@@ -70,7 +75,7 @@ export const useGame = create<GameState>((set, get) => ({
   phase: "menu",
   cash: 0,
   health: 100,
-  ownedWeapons: ["pistol"],
+  ownedWeapons: ["machete", "pistol"],
   ownedUpgrades: [],
   currentWeapon: "pistol",
   ammoInMag: defaultAmmo(),
@@ -84,6 +89,9 @@ export const useGame = create<GameState>((set, get) => ({
   killsThisMission: 0,
   bossKillsThisMission: 0,
   bossSpawned: false,
+  endBossPending: false,
+  endBossSpawned: false,
+  endBossDefeated: false,
   missionStartTime: 0,
   surviveDuration: 0,
   damageFlashId: 0,
@@ -112,7 +120,7 @@ export const useGame = create<GameState>((set, get) => ({
     for (const id of WEAPON_ORDER) {
       const cap = Math.round(WEAPONS[id].magSize * stats.ammoMult);
       ammo[id] = cap;
-      reserves[id] = cap * 4;
+      reserves[id] = WEAPONS[id].melee ? 999 : cap * 4;
     }
     set({
       health: stats.maxHealth,
@@ -123,6 +131,9 @@ export const useGame = create<GameState>((set, get) => ({
       killsThisMission: 0,
       bossKillsThisMission: 0,
       bossSpawned: false,
+      endBossPending: false,
+      endBossSpawned: false,
+      endBossDefeated: false,
       missionStartTime: performance.now(),
       isFiringContinuous: false,
     });
@@ -142,19 +153,27 @@ export const useGame = create<GameState>((set, get) => ({
     const m = MISSIONS.find((x) => x.id === s.missionId);
     if (!m) return;
     const stats = s.getStats();
-    const reward = Math.round(m.reward * stats.cashMult);
+    // End-of-mission boss grants +50% bonus reward.
+    const baseReward = Math.round(m.reward * stats.cashMult);
+    const bossBonus = Math.round(m.reward * 0.5 * stats.cashMult);
     const newOwned = [...s.ownedWeapons];
     if (m.unlockWeapon && !newOwned.includes(m.unlockWeapon)) {
       newOwned.push(m.unlockWeapon);
     }
     set({
       phase: "won",
-      cash: s.cash + reward,
+      cash: s.cash + baseReward + bossBonus,
       missionsCompleted: s.missionsCompleted.includes(s.missionId)
         ? s.missionsCompleted
         : [...s.missionsCompleted, s.missionId],
       ownedWeapons: newOwned,
     });
+  },
+
+  triggerEndBossSpawn: () => {
+    const s = get();
+    if (s.endBossPending || s.endBossSpawned) return;
+    set({ endBossPending: true });
   },
 
   failMission: () => set({ phase: "lost" }),
@@ -170,18 +189,33 @@ export const useGame = create<GameState>((set, get) => ({
     }
   },
 
-  addKill: (boss = false) => {
+  addKill: (boss = false, endBoss = false) => {
     const s = get();
     const stats = s.getStats();
-    const cashReward = Math.round((boss ? 80 : 15) * stats.cashMult);
+    const cashReward = Math.round((endBoss ? 200 : boss ? 80 : 15) * stats.cashMult);
     const m = s.missionId != null ? MISSIONS.find((x) => x.id === s.missionId) : null;
-    let kills = s.killsThisMission + 1;
-    let bossKills = s.bossKillsThisMission + (boss ? 1 : 0);
-    set({ cash: s.cash + cashReward, killsThisMission: kills, bossKillsThisMission: bossKills });
+    const kills = s.killsThisMission + 1;
+    const bossKills = s.bossKillsThisMission + (boss ? 1 : 0);
+    set({
+      cash: s.cash + cashReward,
+      killsThisMission: kills,
+      bossKillsThisMission: bossKills,
+      endBossDefeated: s.endBossDefeated || endBoss,
+    });
     if (m && s.phase === "playing") {
-      if (m.objective.kind === "kill" && kills >= m.objective.count) {
+      // End boss kill always completes the mission immediately.
+      if (endBoss) {
         get().completeMission();
-      } else if (m.objective.kind === "boss" && bossKills >= 1 && kills >= m.objective.count + 1) {
+        return;
+      }
+      // For kill missions: hitting the kill count triggers an end-of-mission
+      // mini-boss instead of immediate completion.
+      if (m.objective.kind === "kill" && kills >= m.objective.count && !s.endBossPending && !s.endBossSpawned) {
+        get().triggerEndBossSpawn();
+      }
+      // Boss missions: the named boss is the end boss — complete when both
+      // the escort count and the boss are down.
+      if (m.objective.kind === "boss" && bossKills >= 1 && kills >= m.objective.count + 1) {
         get().completeMission();
       }
     }
