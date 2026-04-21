@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Dead Frontier: Zombie FPS"
+version = "1.0.0"
+id = "artifacts/zombie-fps"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23566
+
+[services.development]
+run = "pnpm --filter @workspace/zombie-fps run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/zombie-fps", "run", "build" ]
+publicDir = "artifacts/zombie-fps/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23566"
+BASE_PATH = "/"
