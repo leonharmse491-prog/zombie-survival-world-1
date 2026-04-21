@@ -104,11 +104,16 @@ export function Player({
   // Lock pointer when entering play
   useEffect(() => {
     if (phase === "playing" && controlsRef.current) {
-      try { controlsRef.current.lock(); } catch {}
+      // small delay to let the React render flush before requesting lock
+      const t = setTimeout(() => {
+        try { controlsRef.current?.lock(); } catch {}
+      }, 30);
+      return () => clearTimeout(t);
     }
     if (phase !== "playing" && controlsRef.current) {
       try { controlsRef.current.unlock(); } catch {}
     }
+    return undefined;
   }, [phase]);
 
   const fwd = useMemo(() => new THREE.Vector3(), []);
@@ -173,6 +178,9 @@ export function Player({
     }
   });
 
+  // Only mount PointerLockControls during play so it doesn't auto-lock the
+  // cursor when the user clicks on menus or briefing panels.
+  if (phase !== "playing") return null;
   return <PointerLockControls ref={controlsRef} />;
 }
 

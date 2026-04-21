@@ -44,7 +44,7 @@ export function makeObstacles(): Obstacle[] {
     out.push({
       pos: [x, h / 2, z],
       size: [w, h, d],
-      color: i % 3 === 0 ? "#2b2723" : i % 3 === 1 ? "#3a342b" : "#26282b",
+      color: i % 3 === 0 ? "#5b524a" : i % 3 === 1 ? "#6a5e4a" : "#544f4a",
     });
   }
 
@@ -59,7 +59,7 @@ export function makeObstacles(): Obstacle[] {
     out.push({
       pos: [x, s / 2, z],
       size: [s, s, s],
-      color: rand() > 0.5 ? "#5a3e1a" : "#4a4030",
+      color: rand() > 0.5 ? "#8a6a30" : "#7a6850",
     });
   }
 
@@ -71,7 +71,7 @@ export function makeObstacles(): Obstacle[] {
     out.push({
       pos: [x, 0.8, z],
       size: [4, 1.6, 2],
-      color: "#1a1416",
+      color: "#3a2c2e",
     });
   }
 
@@ -81,7 +81,7 @@ export function makeObstacles(): Obstacle[] {
 export function World({ obstacles }: { obstacles: Obstacle[] }) {
   const groundGeo = useMemo(() => new THREE.PlaneGeometry(200, 200), []);
   const groundMat = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: "#1c1c1c", roughness: 0.95, metalness: 0 }),
+    () => new THREE.MeshStandardMaterial({ color: "#3a3a38", roughness: 0.95, metalness: 0 }),
     []
   );
 
@@ -110,11 +110,11 @@ export function World({ obstacles }: { obstacles: Obstacle[] }) {
       {/* Road grid lines */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
         <planeGeometry args={[12, 200]} />
-        <meshStandardMaterial color="#262626" roughness={1} />
+        <meshStandardMaterial color="#4a4a48" roughness={1} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.011, 0]}>
         <planeGeometry args={[200, 12]} />
-        <meshStandardMaterial color="#262626" roughness={1} />
+        <meshStandardMaterial color="#4a4a48" roughness={1} />
       </mesh>
 
       {obstacles.map((o, i) => (
@@ -126,18 +126,18 @@ export function World({ obstacles }: { obstacles: Obstacle[] }) {
 
       {/* Atmospheric point lights */}
       {lights.map((l, i) => (
-        <pointLight key={i} position={l.pos} color={l.color} intensity={1.2} distance={20} />
+        <pointLight key={i} position={l.pos} color={l.color} intensity={2.4} distance={28} />
       ))}
 
       {/* Moonlight */}
       <directionalLight
-        position={[40, 60, 20]}
-        intensity={0.55}
-        color="#9bb6ff"
+        position={[40, 80, 20]}
+        intensity={1.6}
+        color="#cfd9ff"
       />
-      <ambientLight intensity={0.18} color="#3a3a55" />
-      <hemisphereLight args={["#445577", "#1a1a1a", 0.25]} />
-      <fog attach="fog" args={["#0a0a0c", 25, 110]} />
+      <ambientLight intensity={0.65} color="#6a7a9a" />
+      <hemisphereLight args={["#8aa0c4", "#2a2820", 0.85]} />
+      <fog attach="fog" args={["#1a1c22", 60, 180]} />
     </group>
   );
 }
