@@ -129,15 +129,15 @@ export function World({ obstacles }: { obstacles: Obstacle[] }) {
         <pointLight key={i} position={l.pos} color={l.color} intensity={2.4} distance={28} />
       ))}
 
-      {/* Moonlight */}
+      {/* Overcast key light */}
       <directionalLight
-        position={[40, 80, 20]}
-        intensity={1.6}
-        color="#cfd9ff"
+        position={[40, 100, 20]}
+        intensity={2.4}
+        color="#fff4dc"
       />
-      <ambientLight intensity={0.65} color="#6a7a9a" />
-      <hemisphereLight args={["#8aa0c4", "#2a2820", 0.85]} />
-      <fog attach="fog" args={["#1a1c22", 60, 180]} />
+      <ambientLight intensity={1.1} color="#9aa6b8" />
+      <hemisphereLight args={["#b8c4d8", "#3a3428", 1.2]} />
+      <fog attach="fog" args={["#5a6072", 90, 260]} />
     </group>
   );
 }

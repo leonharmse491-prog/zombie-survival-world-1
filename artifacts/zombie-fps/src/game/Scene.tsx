@@ -27,7 +27,7 @@ export function Scene({
       camera={{ fov: 75, near: 0.05, far: 250, position: [0, 1.65, 0] }}
       dpr={[1, 2]}
     >
-      <color attach="background" args={["#1a1c22"]} />
+      <color attach="background" args={["#5a6072"]} />
       <World obstacles={obstacles} />
       <SceneInner
         playerPos={playerPos}

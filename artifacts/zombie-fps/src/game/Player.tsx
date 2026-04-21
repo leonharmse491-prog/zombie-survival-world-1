@@ -1,4 +1,3 @@
-import { PointerLockControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -9,6 +8,8 @@ import type { Zombie, ZombiesAPI } from "./Zombies";
 
 const PLAYER_RADIUS = 0.45;
 const EYE_HEIGHT = 1.65;
+const MOUSE_SENS = 0.0028;
+const PITCH_LIMIT = Math.PI / 2 - 0.05;
 
 export function Player({
   posRef,
@@ -24,9 +25,7 @@ export function Player({
   onShake: () => void;
 }) {
   const { camera, gl } = useThree();
-  const controlsRef = useRef<any>(null);
   const phase = useGame((s) => s.phase);
-  const isLocked = useRef(false);
 
   const keys = useRef<Record<string, boolean>>({});
   const mouseDown = useRef(false);
@@ -34,10 +33,14 @@ export function Player({
   const lastShot = useRef(0);
   const flameAccum = useRef(0);
 
+  const yaw = useRef(0);
+  const pitch = useRef(0);
+
   // Initial camera position
   useEffect(() => {
     camera.position.set(0, EYE_HEIGHT, 0);
     posRef.current.set(0, EYE_HEIGHT, 0);
+    camera.rotation.order = "YXZ";
   }, [camera, posRef]);
 
   useEffect(() => {
@@ -54,7 +57,7 @@ export function Player({
     };
     const onKeyUp = (e: KeyboardEvent) => { keys.current[e.code] = false; };
     const onMouseDown = (e: MouseEvent) => {
-      if (!isLocked.current) return;
+      if (useGame.getState().phase !== "playing") return;
       if (e.button === 0) mouseDown.current = true;
       if (e.button === 2) rmbDown.current = true;
     };
@@ -63,7 +66,7 @@ export function Player({
       if (e.button === 2) rmbDown.current = false;
     };
     const onWheel = (e: WheelEvent) => {
-      if (!isLocked.current) return;
+      if (useGame.getState().phase !== "playing") return;
       const owned = useGame.getState().ownedWeapons;
       const cur = useGame.getState().currentWeapon;
       const idx = owned.indexOf(cur);
@@ -71,12 +74,22 @@ export function Player({
       useGame.getState().selectWeapon(owned[next]);
     };
     const onContext = (e: Event) => e.preventDefault();
+    const onMouseMove = (e: MouseEvent) => {
+      if (useGame.getState().phase !== "playing") return;
+      const dx = e.movementX || 0;
+      const dy = e.movementY || 0;
+      yaw.current -= dx * MOUSE_SENS;
+      pitch.current -= dy * MOUSE_SENS;
+      if (pitch.current > PITCH_LIMIT) pitch.current = PITCH_LIMIT;
+      if (pitch.current < -PITCH_LIMIT) pitch.current = -PITCH_LIMIT;
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("wheel", onWheel);
     window.addEventListener("contextmenu", onContext);
+    window.addEventListener("mousemove", onMouseMove);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
@@ -84,29 +97,15 @@ export function Player({
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("contextmenu", onContext);
+      window.removeEventListener("mousemove", onMouseMove);
     };
   }, []);
 
-  // Track pointer lock state in the store. Do NOT auto-pause when the lock is
-  // lost — the user might just need to re-engage by clicking the overlay.
+  // Reset rotation when leaving play (avoid carrying yaw drift into menus visually)
   useEffect(() => {
-    const dom = gl.domElement;
-    const onLockChange = () => {
-      const locked = document.pointerLockElement === dom;
-      isLocked.current = locked;
-      useGame.setState({ isLocked: locked });
-    };
-    document.addEventListener("pointerlockchange", onLockChange);
-    return () => document.removeEventListener("pointerlockchange", onLockChange);
-  }, [gl]);
-
-  // Unlock pointer when leaving play. Do NOT try to programmatically re-lock
-  // on phase change — browsers throw if a relock is requested too soon after
-  // an exit, and they require the lock request to come from a user gesture
-  // anyway. The "Click to engage" overlay handles re-locking.
-  useEffect(() => {
-    if (phase !== "playing" && controlsRef.current) {
-      try { controlsRef.current.unlock(); } catch {}
+    if (phase !== "playing") {
+      mouseDown.current = false;
+      rmbDown.current = false;
     }
   }, [phase]);
 
@@ -116,6 +115,10 @@ export function Player({
 
   useFrame((_, delta) => {
     if (phase !== "playing") return;
+
+    // Apply mouse-look to camera
+    camera.rotation.set(pitch.current, yaw.current, 0, "YXZ");
+
     const stats = useGame.getState().getStats();
     const sprinting = !!keys.current["ShiftLeft"] || !!keys.current["ShiftRight"];
     const speed = sprinting ? stats.sprintSpeed : stats.walkSpeed;
@@ -164,7 +167,6 @@ export function Player({
       }
     }
 
-    // Continuous flame burn application even between fire ticks
     if (isFlame && mouseDown.current) {
       flameAccum.current += delta;
     } else {
@@ -172,10 +174,9 @@ export function Player({
     }
   });
 
-  // Only mount PointerLockControls during play so it doesn't auto-lock the
-  // cursor when the user clicks on menus or briefing panels.
-  if (phase !== "playing") return null;
-  return <PointerLockControls ref={controlsRef} />;
+  // No DOM controls component needed — we drive the camera ourselves.
+  void gl;
+  return null;
 }
 
 function tryFire(
@@ -209,7 +210,6 @@ function tryFire(
     }
 
     const wallT = raycastAABBs(origin, [dir.x, dir.y, dir.z], obstaclesAABB, w.range);
-    // Find closest zombie hit
     let bestT = wallT;
     let bestZ: Zombie | null = null;
     for (const z of api.list) {
@@ -223,7 +223,6 @@ function tryFire(
       api.damage(bestZ.id, dmgPer);
       if (w.burn) api.ignite(bestZ.id, dmgPer * 1.5, 1500);
     } else if (w.splash && wallT < w.range) {
-      // Explode at wall point or end of range
       const t = isFinite(bestT) && bestT < w.range ? bestT : w.range;
       const cx = origin[0] + dir.x * t;
       const cy = origin[1] + dir.y * t;
@@ -232,7 +231,6 @@ function tryFire(
     }
   }
 
-  // Grenade splash on direct hit too
   if (w.splash) {
     const dir = baseDir.clone();
     const wallT = raycastAABBs(origin, [dir.x, dir.y, dir.z], obstaclesAABB, w.range);
