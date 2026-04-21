@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { MISSIONS } from "./data";
 import { useGame } from "./store";
@@ -333,13 +333,14 @@ export function useZombies(
 
 export function ZombieMeshes({ zombiesRef }: { zombiesRef: React.RefObject<Zombie[]> }) {
   const groupRef = useRef<THREE.Group>(null);
-  // We'll render each zombie individually for simplicity; counts stay modest.
-  const dummy = useRef(0);
+  // Force a re-render every frame so updated positions/yaw/walkPhase from the
+  // simulation actually flow into the JSX. Without this, meshes "teleport"
+  // because React only re-renders on unrelated state changes.
+  const [, setTick] = useState(0);
   useFrame(() => {
-    dummy.current++; // force re-render
+    setTick((t) => (t + 1) | 0);
   });
 
-  // Snapshot to map (acceptable per-frame at modest counts)
   const list = zombiesRef.current ?? [];
 
   return (
