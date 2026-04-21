@@ -23,6 +23,7 @@ export interface GameState {
   reloading: boolean;
   reloadEndsAt: number;
   isFiringContinuous: boolean;
+  isLocked: boolean;
 
   missionId: number | null;
   missionsCompleted: number[];
@@ -78,6 +79,7 @@ export const useGame = create<GameState>((set, get) => ({
   reloading: false,
   reloadEndsAt: 0,
   isFiringContinuous: false,
+  isLocked: false,
 
   missionId: null,
   missionsCompleted: [],

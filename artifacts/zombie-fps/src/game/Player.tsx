@@ -87,33 +87,27 @@ export function Player({
     };
   }, []);
 
-  // Auto-pause when pointer unlocks during play
+  // Track pointer lock state in the store. Do NOT auto-pause when the lock is
+  // lost — the user might just need to re-engage by clicking the overlay.
   useEffect(() => {
     const dom = gl.domElement;
     const onLockChange = () => {
       const locked = document.pointerLockElement === dom;
       isLocked.current = locked;
-      if (!locked && useGame.getState().phase === "playing") {
-        useGame.setState({ phase: "paused" });
-      }
+      useGame.setState({ isLocked: locked });
     };
     document.addEventListener("pointerlockchange", onLockChange);
     return () => document.removeEventListener("pointerlockchange", onLockChange);
   }, [gl]);
 
-  // Lock pointer when entering play
+  // Unlock pointer when leaving play. Do NOT try to programmatically re-lock
+  // on phase change — browsers throw if a relock is requested too soon after
+  // an exit, and they require the lock request to come from a user gesture
+  // anyway. The "Click to engage" overlay handles re-locking.
   useEffect(() => {
-    if (phase === "playing" && controlsRef.current) {
-      // small delay to let the React render flush before requesting lock
-      const t = setTimeout(() => {
-        try { controlsRef.current?.lock(); } catch {}
-      }, 30);
-      return () => clearTimeout(t);
-    }
     if (phase !== "playing" && controlsRef.current) {
       try { controlsRef.current.unlock(); } catch {}
     }
-    return undefined;
   }, [phase]);
 
   const fwd = useMemo(() => new THREE.Vector3(), []);
