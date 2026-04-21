@@ -1,0 +1,20 @@
+name: Cloud EXE Builder
+on: [push]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Create EXE
+        run: npx pkg scripts/src/hello.ts --target node16-win-x64 --output survival-game.exe
+      - name: Save EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-game-file
+          path: survival-game.exe
