@@ -16,6 +16,8 @@ export interface Zombie {
   burnDmgPerSec: number;
   isBoss: boolean;
   size: number;
+  yaw: number;
+  walkPhase: number;
 }
 
 export interface ZombiesAPI {
@@ -118,8 +120,13 @@ export function useZombies(
       const z = player.z + Math.sin(angle) * dist;
       const clampedX = Math.max(-78, Math.min(78, x));
       const clampedZ = Math.max(-78, Math.min(78, z));
-      const isRunner = mission.zombieMult >= 1.8 && Math.random() < 0.35;
-      const speed = isRunner ? 4.2 + Math.random() * 0.8 : 1.8 + Math.random() * 0.8;
+      // Mix of shamblers and sprinters — sprinters chase down even a sprinting player.
+      // Higher difficulty = more sprinters in the crowd.
+      const runnerChance = Math.min(0.85, 0.25 + mission.zombieMult * 0.18);
+      const isRunner = Math.random() < runnerChance;
+      const speed = isRunner
+        ? 6.0 + Math.random() * 1.6   // sprinter: ~6.0–7.6 (player sprint = 9)
+        : 3.2 + Math.random() * 1.0;  // shambler: ~3.2–4.2 (player walk = 5)
       const baseHp = 60 + 20 * mission.zombieMult;
       zombies.current.push({
         id: nextId.current++,
@@ -132,6 +139,8 @@ export function useZombies(
         burnDmgPerSec: 0,
         isBoss: false,
         size: 1,
+        yaw: Math.atan2(player.x - clampedX, player.z - clampedZ),
+        walkPhase: Math.random() * Math.PI * 2,
       });
     }
 
@@ -150,12 +159,14 @@ export function useZombies(
         pos: new THREE.Vector3(x, 1.6, z),
         hp: 1500,
         maxHp: 1500,
-        speed: 2.2,
+        speed: 4.5,
         attackCd: 0,
         burnUntil: 0,
         burnDmgPerSec: 0,
         isBoss: true,
         size: 2.2,
+        yaw: Math.atan2(player.x - x, player.z - z),
+        walkPhase: 0,
       });
       useGame.setState({ bossSpawned: true });
     }
@@ -166,7 +177,7 @@ export function useZombies(
       if (now < z.burnUntil && z.burnDmgPerSec > 0) {
         z.hp -= z.burnDmgPerSec * delta;
       }
-      // Move toward player
+      // Chase the player relentlessly
       const dx = player.x - z.pos.x;
       const dz = player.z - z.pos.z;
       const dist = Math.hypot(dx, dz);
@@ -178,8 +189,20 @@ export function useZombies(
         const desZ = z.pos.z + nz * stepDist;
         const r = 0.6 * z.size;
         const next = resolveMove(z.pos.x, z.pos.z, desX, desZ, r, obstaclesAABB);
+        const movedX = next.x - z.pos.x;
+        const movedZ = next.z - z.pos.z;
         z.pos.x = next.x;
         z.pos.z = next.z;
+        // Face the player and animate stride
+        const targetYaw = Math.atan2(nx, nz);
+        let dy = targetYaw - z.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        z.yaw += dy * Math.min(1, delta * 10);
+        const moved = Math.hypot(movedX, movedZ);
+        if (moved > 0.0001) {
+          z.walkPhase += delta * (z.speed * 1.4);
+        }
       }
       // Attack player
       const attackRange = 1.6 + z.size * 0.6;
@@ -227,35 +250,40 @@ export function ZombieMeshes({ zombiesRef }: { zombiesRef: React.RefObject<Zombi
         const burning = performance.now() < z.burnUntil;
         const color = z.isBoss ? "#5a1a1a" : burning ? "#ff7733" : "#3d4a2b";
         const headColor = z.isBoss ? "#7a2222" : "#4a5530";
+        const swing = Math.sin(z.walkPhase) * 0.6;
+        const swing2 = Math.sin(z.walkPhase + Math.PI) * 0.6;
+        const bob = Math.abs(Math.sin(z.walkPhase)) * 0.08;
+        const isSprinter = z.speed > 5.5 && !z.isBoss;
+        const lean = isSprinter ? 0.25 : 0.05;
         return (
-          <group key={z.id} position={[z.pos.x, 0, z.pos.z]}>
+          <group key={z.id} position={[z.pos.x, bob, z.pos.z]} rotation={[0, z.yaw, 0]}>
             {/* Body */}
-            <mesh castShadow position={[0, 0.9 * z.size, 0]}>
+            <mesh castShadow position={[0, 0.9 * z.size, 0]} rotation={[lean, 0, 0]}>
               <boxGeometry args={[0.8 * z.size, 1.4 * z.size, 0.5 * z.size]} />
               <meshStandardMaterial color={color} roughness={0.9} emissive={burning ? "#ff5511" : "#000"} emissiveIntensity={burning ? 0.6 : 0} />
             </mesh>
             {/* Head */}
-            <mesh castShadow position={[0, 1.85 * z.size, 0]}>
+            <mesh castShadow position={[0, 1.85 * z.size, 0.05 * z.size]} rotation={[lean * 0.5, 0, 0]}>
               <boxGeometry args={[0.55 * z.size, 0.55 * z.size, 0.55 * z.size]} />
               <meshStandardMaterial color={headColor} roughness={0.9} />
             </mesh>
-            {/* Arms (outstretched) */}
-            <mesh castShadow position={[-0.6 * z.size, 1.2 * z.size, 0.3 * z.size]} rotation={[Math.PI / 4, 0, 0]}>
+            {/* Arms (outstretched, swinging) */}
+            <mesh castShadow position={[-0.55 * z.size, 1.25 * z.size, 0.35 * z.size]} rotation={[Math.PI / 4 + swing * 0.3, 0, 0]}>
               <boxGeometry args={[0.22 * z.size, 0.9 * z.size, 0.22 * z.size]} />
               <meshStandardMaterial color={color} />
             </mesh>
-            <mesh castShadow position={[0.6 * z.size, 1.2 * z.size, 0.3 * z.size]} rotation={[Math.PI / 4, 0, 0]}>
+            <mesh castShadow position={[0.55 * z.size, 1.25 * z.size, 0.35 * z.size]} rotation={[Math.PI / 4 + swing2 * 0.3, 0, 0]}>
               <boxGeometry args={[0.22 * z.size, 0.9 * z.size, 0.22 * z.size]} />
               <meshStandardMaterial color={color} />
             </mesh>
-            {/* Legs */}
-            <mesh castShadow position={[-0.2 * z.size, 0.2 * z.size, 0]}>
-              <boxGeometry args={[0.28 * z.size, 0.4 * z.size, 0.28 * z.size]} />
-              <meshStandardMaterial color="#222" />
+            {/* Legs (alternating stride) */}
+            <mesh castShadow position={[-0.2 * z.size, 0.25 * z.size, swing * 0.15 * z.size]} rotation={[swing * 0.7, 0, 0]}>
+              <boxGeometry args={[0.28 * z.size, 0.5 * z.size, 0.28 * z.size]} />
+              <meshStandardMaterial color="#1f1f1f" />
             </mesh>
-            <mesh castShadow position={[0.2 * z.size, 0.2 * z.size, 0]}>
-              <boxGeometry args={[0.28 * z.size, 0.4 * z.size, 0.28 * z.size]} />
-              <meshStandardMaterial color="#222" />
+            <mesh castShadow position={[0.2 * z.size, 0.25 * z.size, swing2 * 0.15 * z.size]} rotation={[swing2 * 0.7, 0, 0]}>
+              <boxGeometry args={[0.28 * z.size, 0.5 * z.size, 0.28 * z.size]} />
+              <meshStandardMaterial color="#1f1f1f" />
             </mesh>
             {/* HP bar */}
             <group position={[0, 2.45 * z.size, 0]}>
