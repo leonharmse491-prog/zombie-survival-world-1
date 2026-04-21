@@ -114,12 +114,39 @@ export function useZombies(
       now - lastSpawn.current > spawnInterval
     ) {
       lastSpawn.current = now;
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 28 + Math.random() * 18;
-      const x = player.x + Math.cos(angle) * dist;
-      const z = player.z + Math.sin(angle) * dist;
-      const clampedX = Math.max(-78, Math.min(78, x));
-      const clampedZ = Math.max(-78, Math.min(78, z));
+      // Find a spawn point: at least MIN_DIST away from player, inside arena,
+      // not inside any obstacle. Try several candidates before giving up.
+      const MIN_DIST = 25;
+      const MAX_DIST = 45;
+      let spawnX = 0;
+      let spawnZ = 0;
+      let valid = false;
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = MIN_DIST + Math.random() * (MAX_DIST - MIN_DIST);
+        const cx = player.x + Math.cos(angle) * dist;
+        const cz = player.z + Math.sin(angle) * dist;
+        if (cx < -78 || cx > 78 || cz < -78 || cz > 78) continue;
+        const dx = cx - player.x;
+        const dz = cz - player.z;
+        if (Math.hypot(dx, dz) < MIN_DIST) continue;
+        // reject if inside an obstacle (with margin)
+        let blocked = false;
+        for (const o of obstaclesAABB) {
+          if (cx > o.minX - 0.8 && cx < o.maxX + 0.8 && cz > o.minZ - 0.8 && cz < o.maxZ + 0.8) {
+            blocked = true;
+            break;
+          }
+        }
+        if (blocked) continue;
+        spawnX = cx;
+        spawnZ = cz;
+        valid = true;
+        break;
+      }
+      const clampedX = spawnX;
+      const clampedZ = spawnZ;
+      if (valid) {
       // Mix of shamblers and sprinters — sprinters chase down even a sprinting player.
       // Higher difficulty = more sprinters in the crowd.
       const runnerChance = Math.min(0.85, 0.25 + mission.zombieMult * 0.18);
@@ -142,6 +169,7 @@ export function useZombies(
         yaw: Math.atan2(player.x - clampedX, player.z - clampedZ),
         walkPhase: Math.random() * Math.PI * 2,
       });
+      }
     }
 
     // Boss spawn
@@ -150,25 +178,40 @@ export function useZombies(
       !bossSpawned &&
       useGame.getState().killsThisMission >= Math.max(2, Math.floor(mission.objective.count * 0.4))
     ) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 25;
-      const x = player.x + Math.cos(angle) * dist;
-      const z = player.z + Math.sin(angle) * dist;
-      zombies.current.push({
-        id: nextId.current++,
-        pos: new THREE.Vector3(x, 1.6, z),
-        hp: 1500,
-        maxHp: 1500,
-        speed: 4.5,
-        attackCd: 0,
-        burnUntil: 0,
-        burnDmgPerSec: 0,
-        isBoss: true,
-        size: 2.2,
-        yaw: Math.atan2(player.x - x, player.z - z),
-        walkPhase: 0,
-      });
-      useGame.setState({ bossSpawned: true });
+      let bx = 0, bz = 0, bossValid = false;
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 30 + Math.random() * 12;
+        const cx = player.x + Math.cos(angle) * dist;
+        const cz = player.z + Math.sin(angle) * dist;
+        if (cx < -75 || cx > 75 || cz < -75 || cz > 75) continue;
+        let blocked = false;
+        for (const o of obstaclesAABB) {
+          if (cx > o.minX - 1.5 && cx < o.maxX + 1.5 && cz > o.minZ - 1.5 && cz < o.maxZ + 1.5) {
+            blocked = true;
+            break;
+          }
+        }
+        if (blocked) continue;
+        bx = cx; bz = cz; bossValid = true; break;
+      }
+      if (bossValid) {
+        zombies.current.push({
+          id: nextId.current++,
+          pos: new THREE.Vector3(bx, 1.6, bz),
+          hp: 1500,
+          maxHp: 1500,
+          speed: 4.5,
+          attackCd: 0,
+          burnUntil: 0,
+          burnDmgPerSec: 0,
+          isBoss: true,
+          size: 2.2,
+          yaw: Math.atan2(player.x - bx, player.z - bz),
+          walkPhase: 0,
+        });
+        useGame.setState({ bossSpawned: true });
+      }
     }
 
     // Update each zombie
